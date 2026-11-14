@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Drowsiness Detection",
+			"type": "shell",
+			"command": "python.exe drowsiness_detector.py",
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}
