@@ -12,6 +12,9 @@ import sys
 import platform
 import threading
 import time
+import shutil
+import urllib.request
+import bz2
 
 # Try to import sound libraries
 try:
@@ -46,10 +49,12 @@ class DrowsinessDetector:
         if USE_DLIB:
             self.detector = dlib.get_frontal_face_detector()
             # Download shape predictor model if not available
-            self.predictor_path = "shape_predictor_68_face_landmarks.dat"
+            self.predictor_path = os.path.join(os.path.dirname(__file__), "shape_predictor_68_face_landmarks.dat")
             if not os.path.exists(self.predictor_path):
                 print("Downloading dlib shape predictor...")
                 self._download_predictor()
+            if not os.path.exists(self.predictor_path):
+                raise FileNotFoundError("dlib face landmark model not found and could not be downloaded.")
             self.predictor = dlib.shape_predictor(self.predictor_path)
         else:
             self.face_cascade = cv2.CascadeClassifier(
@@ -58,28 +63,48 @@ class DrowsinessDetector:
             self.eye_cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + 'haarcascade_eye.xml'
             )
-        
-        # Get alert sound path
+
+        # Ensure we have a valid alert sound file before running
         self.alert_sound = self._get_alert_sound()
+        if not self.alert_sound:
+            self.alert_sound = self._generate_alert_sound()
     
     def _download_predictor(self):
-        """Download the dlib shape predictor if not available"""
+        """Download the dlib shape predictor if not available."""
         try:
-            import urllib.request
-            import zipfile
-            
-            url = "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2"
+            url = "https://github.com/davisking/dlib-models/raw/master/shape_predictor_68_face_landmarks.dat.bz2"
+            archive_path = os.path.join(os.path.dirname(__file__), "shape_predictor_68_face_landmarks.dat.bz2")
             print(f"Downloading from {url}...")
-            # Note: This is a large file, you may want to download manually
-            print("Please download manually from http://dlib.net/files/")
+            urllib.request.urlretrieve(url, archive_path)
+
+            with bz2.open(archive_path, "rb") as compressed_file:
+                with open(self.predictor_path, "wb") as output_file:
+                    shutil.copyfileobj(compressed_file, output_file)
+
+            os.remove(archive_path)
+            print("dlib face landmark model downloaded successfully.")
         except Exception as e:
             print(f"Error downloading predictor: {e}")
-    
+
+    def _generate_alert_sound(self):
+        """Create alert.wav automatically when the project does not include it."""
+        try:
+            from generate_alert import generate_alert_sound
+            output_path = os.path.join(os.path.dirname(__file__), "alert.wav")
+            generate_alert_sound(filename=output_path)
+            if os.path.exists(output_path):
+                return output_path
+        except Exception as e:
+            print(f"Warning: could not generate alert.wav automatically: {e}")
+        return None
+
     def _get_alert_sound(self):
         """Get path to alert sound file"""
         # Try to find alert.wav in project directory
-        if os.path.exists("alert.wav"):
-            return "alert.wav"
+        project_root = os.path.dirname(__file__)
+        alert_path = os.path.join(project_root, "alert.wav")
+        if os.path.exists(alert_path):
+            return alert_path
         # Use system default beep or return None
         return None
     
